@@ -1,13 +1,24 @@
 const Seat = require("../models/SeatSchema");
 // variable to create seat
-const seatConstant = require('../utils/Constant')
+const seatConstant = require("../utils/Constant");
 
+let totalRows = Math.ceil(
+  seatConstant.totalNumberSeats / seatConstant.seatsPerRow
+);
+let seatsInLastRow = seatConstant.totalNumberSeats % seatConstant.seatsPerRow;
 
-let totalRows = Math.ceil(seatConstant.totalNumberSeats / seatConstant.seatsPerRow);
-let seatsInLastRow = seatConstant.totalNumberSeats %seatConstant.seatsPerRow;
+async function fetchSeats() {
+  try {
+    const resp = await Seat.find();
+    return resp[0].seatInRow;
+  } catch (err) {
+    console.log(err);
+    return null;
+  }
+}
 
-
-exports.bookSeats = (req, res) => {
+//controller to book seat
+exports.bookSeats = async (req, res) => {
   const { book } = req.body;
   if (book == null || book > 7) {
     return res.status(400).json({
@@ -15,28 +26,26 @@ exports.bookSeats = (req, res) => {
       status: "FAILED",
     });
   }
-  Seat.find()
-    .then((resp) => {
-      let allSeatBooked = toReserveSeats(req, resp[0].seatInRow, book);
-      if (allSeatBooked) {
-        res.json({
-          message: "Seat are booked",
-          bookedSeat: allSeatBooked,
-          status: "SUCCESS",
-        });
-      }
-    })
-    .catch((err) =>
-      res.status(500).json({
-        message: "Failed to book seat.",
-        error: err,
-      })
-    );
+  try {
+    const seats = await fetchSeats();
+    let allSeatBooked = await toReserveSeats(req, seats, book);
+    if (allSeatBooked) {
+      res.json({
+        message: "Seat are booked",
+        bookedSeat: allSeatBooked,
+        status: "SUCCESS",
+      });
+    }
+  } catch (err) {
+    res.status(500).json({
+      message: "Failed to book seat.",
+      error: err,
+    });
+  }
 };
 
 //FUNCTION TO FETCH THE AVAILABLE SEAT
 exports.availableSeats = (req, res, next) => {
-  let availableSeat = 0;
   Seat.find()
     .then((resp) => {
       //IF NO SEATS AVAILABLE
@@ -60,8 +69,9 @@ exports.availableSeats = (req, res, next) => {
     });
 };
 
-exports.getNumberofAvailableSeat = (req, res, next) => {
+exports.getNumberofAvailableSeat = async (req, res, next) => {
   let availableSeat = 0;
+
   Seat.find()
     .then((resp) => {
       if (!resp) {
@@ -72,8 +82,9 @@ exports.getNumberofAvailableSeat = (req, res, next) => {
       } else {
         for (let i = 0; i < resp[0].seatInRow.length; i++) {
           let seatNumber =
-            i === resp[0].seatInRow.length - 1 ?
-            seatsInLastRow :seatConstant.seatsPerRow;
+            i === resp[0].seatInRow.length - 1
+              ? seatsInLastRow
+              : seatConstant.seatsPerRow;
           for (let j = 0; j < seatNumber; j++) {
             if (resp[0].seatInRow[i][j].status == 0) {
               availableSeat++;
@@ -133,7 +144,6 @@ function seatAvailableInConsecutiveRow(
   let availableSeat = [];
   let seatNumberArray = [];
 
-  let obj = {};
   for (let i = 0; i < seatList.length; i++) {
     for (let j = 0; j < seatList[i].length; j++) {
       if (seatList[i][j].status == 0) {
@@ -150,10 +160,8 @@ function seatAvailableInConsecutiveRow(
       }
     }
     if (i == seatList.length - 1) {
-      console.log(i);
       availableSeat.sort((a, b) => b.length - a.length);
       availableSeat?.some((seatslength) => {
-        console.log(availableSeat);
         if (seatslength.length == seatsRequired) {
           return (obj = seatslength);
         }
@@ -161,16 +169,37 @@ function seatAvailableInConsecutiveRow(
           return (obj = availableSeat.flat());
         }
       });
-      console.log("obj", obj);
       return obj;
     }
-    // checkForEmptySpaceAndPushToArray(i+2, seatList, seatNumberArray );
   }
-
-  // console.log("seatNumberArray", seatNumberArray);
 }
 
-function toReserveSeats(req, seatList, seatsRequired) {
+//function to update seat status
+const updateSeatsStatus = async (seatNumbers, status, remaningRequiredSeat) => {
+  try {
+    // Since the seats are not in a flat array, we need to update each seat individually
+    for (const seatNumber of seatNumbers) {
+      if (remaningRequiredSeat > 0) {
+        // calculating the row and index to update seat
+        const row = Math.floor((seatNumber - 1) / seatConstant.seatsPerRow);
+        const index = (seatNumber - 1) % seatConstant.seatsPerRow;
+
+        await Seat.updateOne(
+          { [`seatInRow.${row}.${index}.seatNumber`]: seatNumber },
+          { $set: { [`seatInRow.${row}.${index}.status`]: status } }
+        ).then((resp) => {
+          if (resp.modifiedCount == 1) {
+            remaningRequiredSeat--;
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+async function toReserveSeats(req, seatList, seatsRequired) {
   let remaningRequiredSeat = seatsRequired;
 
   //variable to store available number of seat
@@ -207,32 +236,11 @@ function toReserveSeats(req, seatList, seatsRequired) {
         availableSeatNumber
       );
       if (result) {
-        for (let k = 0; k < seatList.length; k++) {
-          let seatInRow =
-            k === seatList.length - 1 ?
-            seatsInLastRow :seatConstant.seatsPerRow;
-          result.forEach((seats) => {
-            for (let l = 0; l < seatInRow; l++) {
-              {
-                console.log(remaningRequiredSeat, k, l, result.seatNumber);
-                if (remaningRequiredSeat > 0)
-                  Seat.updateOne(
-                    {
-                      [`seatInRow.${k}.${l}.seatNumber`]: {
-                        $eq: seats.seatNumber,
-                      },
-                    },
-                    { $set: { [`seatInRow.${k}.${l}.status`]: 1 } }
-                  )
-                    .then((resp) => {
-                      if (resp.modifiedCount == 1) {
-                        remaningRequiredSeat--;
-                      }
-                    })
-                    .catch((err) => console.log(err));
-              }
-            }
-          });
+        const seatNumbers = result.map((seat) => seat.seatNumber);
+        try {
+          await updateSeatsStatus(seatNumbers, 1, remaningRequiredSeat);
+        } catch (err) {
+          console.log(err);
         }
       }
       return result.slice(0, seatsRequired);
@@ -242,31 +250,35 @@ function toReserveSeats(req, seatList, seatsRequired) {
       seatsRequired == seatRows?.maxConsecutiveSeat?.length ||
       (indexOfRow > -1 && i === seatList.length - 1)
     ) {
+      const seatNumbers = maxConsecutiveSeat.map((seat) => seat.seatNumber);
+      try {
+        await updateSeatsStatus(seatNumbers, 1, remaningRequiredSeat);
+      } catch (err) {
+        console.log(err);
+      }
       //looping all consecutive seat
-      maxConsecutiveSeat.forEach((seat) => {
-        for (let j = 0; j < seatList[indexOfRow].length; j++) {
-          //checking the remaining seat to book
-          if (remaningRequiredSeat > 0) {
-            //updating status seatmunber in database
-            Seat.updateOne(
-              {
-                [`seatInRow.${indexOfRow}.${j}.seatNumber`]: {
-                  $eq: seat.seatNumber,
-                },
-              },
-              { $set: { [`seatInRow.${indexOfRow}.${j}.status`]: 1 } }
-            ).catch((err) => console.log(err));
-          }
-        }
-        remaningRequiredSeat--;
-      });
+      //   maxConsecutiveSeat.forEach((seat) => {
+      //     for (let j = 0; j < seatList[indexOfRow].length; j++) {
+      //       //checking the remaining seat to book
+      //       if (remaningRequiredSeat > 0) {
+      //         //updating status seatmunber in database
+      //         Seat.updateOne(
+      //           {
+      //             [`seatInRow.${indexOfRow}.${j}.seatNumber`]: {
+      //               $eq: seat.seatNumber,
+      //             },
+      //           },
+      //           { $set: { [`seatInRow.${indexOfRow}.${j}.status`]: 1 } }
+      //         ).catch((err) => console.log(err));
+      //       }
+      //     }
+      //     remaningRequiredSeat--;
+      //   });
 
       //returning booked seat number to the user
       return maxConsecutiveSeat.slice(0, seatsRequired);
     }
   }
-
-  console.log("code ended", availableSeatNumber);
 }
 
 //function to store seatdata in database according to number of row and seat
@@ -294,10 +306,10 @@ exports.createSeatController = (req, res) => {
 
 //function to reset all seat status and book some random seat
 exports.resetAllSeat = (req, res, next) => {
-  for (let i = 0; i <totalRows; i++) {
+  for (let i = 0; i < totalRows; i++) {
     //checking that is it last row or not
-    let seatInRow = i ===totalRows - 1 ?
-    seatsInLastRow :seatConstant.seatsPerRow;
+    let seatInRow =
+      i === totalRows - 1 ? seatsInLastRow : seatConstant.seatsPerRow;
 
     //making all seat to available
     for (let j = 0; j < seatInRow; j++) {
@@ -322,12 +334,12 @@ exports.resetAllSeat = (req, res, next) => {
 //function to create seat on the basis of variable
 function creatSeat() {
   let seatNumber = 1;
-  for (let i = 0; i <totalRows; i++) {
-   seatConstant.coach[i] = [];
-    let seatInRow = i ===totalRows - 1 ?
-    seatsInLastRow :seatConstant.seatsPerRow;
+  for (let i = 0; i < totalRows; i++) {
+    seatConstant.coach[i] = [];
+    let seatInRow =
+      i === totalRows - 1 ? seatsInLastRow : seatConstant.seatsPerRow;
     for (let j = 0; j < seatInRow; j++) {
-    seatConstant.coach[i][j] = { seatNumber: seatNumber, status: 0 };
+      seatConstant.coach[i][j] = { seatNumber: seatNumber, status: 0 };
       seatNumber++;
     }
   }
@@ -348,10 +360,10 @@ function toBookRandomSeat(req, res) {
   //updating database with selected seat as occupied and send success response
   [...random].forEach((randomValue, index) => {
     //calculating row where to update
-    let row = Math.floor(randomValue /seatConstant.seatsPerRow);
+    let row = Math.floor(randomValue / seatConstant.seatsPerRow);
 
     //calculating index where to update
-    let element = randomValue %seatConstant.seatsPerRow;
+    let element = randomValue % seatConstant.seatsPerRow;
 
     //changing in database
     Seat.updateOne(
