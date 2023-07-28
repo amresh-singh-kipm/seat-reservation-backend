@@ -2,9 +2,12 @@ const Seat = require("../models/SeatSchema");
 // variable to create seat
 const seatConstant = require("../utils/Constant");
 
+//calculating total row
 let totalRows = Math.ceil(
   seatConstant.totalNumberSeats / seatConstant.seatsPerRow
 );
+
+//calculating seat number in particular row
 let seatsInLastRow = seatConstant.totalNumberSeats % seatConstant.seatsPerRow;
 
 async function fetchSeats() {
@@ -69,6 +72,7 @@ exports.availableSeats = (req, res, next) => {
     });
 };
 
+//function to get sum of available seat in all row 
 exports.getNumberofAvailableSeat = async (req, res, next) => {
   let availableSeat = 0;
 
@@ -104,38 +108,31 @@ exports.getNumberofAvailableSeat = async (req, res, next) => {
     });
 };
 
+//function to get index of required row and seat to book
 function seatsAvailableInRow(row, seatList, seatsRequired) {
   let availableSeat = [];
   let seatNumberArray = [];
-  let obj = {};
   for (let j = 0; j < seatList[row].length; j++) {
-    if (seatList[row][j].status == 0) {
+    if (seatList[row][j].status === 0) {
       seatNumberArray.push(seatList[row][j]);
-    }
-    if (seatList[row][j].status !== 0) {
+    } else {
       availableSeat.push(seatNumberArray);
-
       seatNumberArray = [];
     }
-    if (j == seatList[row].length - 1) {
-      availableSeat.push(seatNumberArray);
-      availableSeat.some((arraylength) => {
-        let maxLength = arraylength.length;
-        if (maxLength > seatsRequired) {
-          obj = { rowIndex: row, maxConsecutiveSeat: arraylength };
-        }
-        if (maxLength == seatsRequired) {
-          return (obj = { rowIndex: row, maxConsecutiveSeat: arraylength });
-        }
-      });
-      return obj;
+
+    // checking at the end of the row or when a seat is booked 
+    if (j == seatList[row].length - 1 || seatList[row][j].status !== 0) {
+      if (seatNumberArray.length >= seatsRequired) {
+        return { rowIndex: row, maxConsecutiveSeat: seatNumberArray.slice(0, seatsRequired) };
+      }
+      seatNumberArray = [];
     }
   }
-  availableSeat = [];
 
   return -1;
 }
 
+//function to get seat if avaiable required seat are not available in all row
 function seatAvailableInConsecutiveRow(
   seatList,
   seatsRequired,
@@ -162,6 +159,7 @@ function seatAvailableInConsecutiveRow(
     if (i == seatList.length - 1) {
       availableSeat.sort((a, b) => b.length - a.length);
       availableSeat?.some((seatslength) => {
+        console.log(availableSeat,seatslength)
         if (seatslength.length == seatsRequired) {
           return (obj = seatslength);
         }
@@ -214,7 +212,6 @@ async function toReserveSeats(req, seatList, seatsRequired) {
   for (let i = 0; i < seatList.length; i++) {
     //getting the row and seatnumber for the booking of seat
     let seatRows = seatsAvailableInRow(i, seatList, seatsRequired);
-
     //checking the length of consecutive seat in row is greater than or equal to required seat
     if (seatRows.maxConsecutiveSeat?.length >= seatsRequired) {
       //checking the consecutive seat in previous row is greater than the current row
