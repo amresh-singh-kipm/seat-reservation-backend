@@ -40,8 +40,8 @@ exports.bookSeats = async (req, res) => {
       });
     }
   } catch (err) {
-    res.status(500).json({
-      message: "Failed to book seat.",
+    res.status(400).json({
+      message: "No seat are avaiable.",
       error: err,
     });
   }
