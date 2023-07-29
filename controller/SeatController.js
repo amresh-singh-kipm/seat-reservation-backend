@@ -72,7 +72,7 @@ exports.availableSeats = (req, res, next) => {
     });
 };
 
-//function to get sum of available seat in all row 
+//function to get sum of available seat in all row
 exports.getNumberofAvailableSeat = async (req, res, next) => {
   let availableSeat = 0;
 
@@ -112,23 +112,32 @@ exports.getNumberofAvailableSeat = async (req, res, next) => {
 function seatsAvailableInRow(row, seatList, seatsRequired) {
   let availableSeat = [];
   let seatNumberArray = [];
+  let obj = {};
   for (let j = 0; j < seatList[row].length; j++) {
-    if (seatList[row][j].status === 0) {
+    if (seatList[row][j].status == 0) {
       seatNumberArray.push(seatList[row][j]);
-    } else {
+    }
+    if (seatList[row][j].status !== 0) {
       availableSeat.push(seatNumberArray);
+
       seatNumberArray = [];
     }
-
-    // checking at the end of the row or when a seat is booked 
-    if (j == seatList[row].length - 1 || seatList[row][j].status !== 0) {
-      if (seatNumberArray.length >= seatsRequired) {
-        return { rowIndex: row, maxConsecutiveSeat: seatNumberArray.slice(0, seatsRequired) };
-      }
-      seatNumberArray = [];
+    if (j == seatList[row].length - 1) {
+      availableSeat.push(seatNumberArray);
+      availableSeat.some((arraylength) => {
+        let maxLength = arraylength.length;
+        if (maxLength > seatsRequired) {
+          obj = { rowIndex: row, maxConsecutiveSeat: arraylength };
+        }
+        if (maxLength == seatsRequired) {
+          return (obj = { rowIndex: row, maxConsecutiveSeat: arraylength });
+        }
+      });
+      return obj;
     }
   }
-
+  availableSeat = [];
+  console.log("nsdihksdkjsdnjk", obj);
   return -1;
 }
 
@@ -145,25 +154,24 @@ function seatAvailableInConsecutiveRow(
     for (let j = 0; j < seatList[i].length; j++) {
       if (seatList[i][j].status == 0) {
         seatNumberArray.push(seatList[i][j]);
-      }
-      if (seatList[i][j].status !== 0) {
-        // availableSeat.push(seatNumberArray);
+      } else {
+        availableSeat.push(seatNumberArray);
         seatNumberArray = [];
       }
       if (j == seatList[i].length - 1) {
         if (seatNumberArray.length > 0) {
           availableSeat.push(seatNumberArray);
         }
+        seatNumberArray = [];
       }
     }
     if (i == seatList.length - 1) {
       availableSeat.sort((a, b) => b.length - a.length);
       availableSeat?.some((seatslength) => {
-        console.log(availableSeat,seatslength)
         if (seatslength.length == seatsRequired) {
           return (obj = seatslength);
         }
-        if (availableSeatNumber > seatsRequired) {
+        if (availableSeatNumber >= seatsRequired) {
           return (obj = availableSeat.flat());
         }
       });
@@ -197,6 +205,7 @@ const updateSeatsStatus = async (seatNumbers, status, remaningRequiredSeat) => {
   }
 };
 
+//function to reserve seat
 async function toReserveSeats(req, seatList, seatsRequired) {
   let remaningRequiredSeat = seatsRequired;
 
@@ -233,6 +242,7 @@ async function toReserveSeats(req, seatList, seatsRequired) {
         availableSeatNumber
       );
       if (result) {
+        console.log(result);
         const seatNumbers = result.map((seat) => seat.seatNumber);
         try {
           await updateSeatsStatus(seatNumbers, 1, remaningRequiredSeat);
