@@ -39,6 +39,12 @@ exports.bookSeats = async (req, res) => {
         status: "SUCCESS",
       });
     }
+    if (!allSeatBooked) {
+      res.status(400).json({
+        message: "No seat are avaiable.",
+        error: err,
+      });
+    }
   } catch (err) {
     res.status(400).json({
       message: "No seat are avaiable.",
@@ -130,7 +136,7 @@ function seatsAvailableInRow(row, seatList, seatsRequired) {
       availableSeat.some((arraylength) => {
         let maxLength = arraylength.length;
 
-        //checking is the length of consecutive seat is greater than the required seat or not 
+        //checking is the length of consecutive seat is greater than the required seat or not
         if (maxLength > seatsRequired) {
           obj = { rowIndex: row, maxConsecutiveSeat: arraylength };
         }
@@ -190,21 +196,18 @@ const updateSeatsStatus = async (seatNumbers, status, remaningRequiredSeat) => {
   try {
     // Since the seats are not in a flat array, we need to update each seat individually
     for (const seatNumber of seatNumbers) {
-
       //checking that is any seat left to book
       if (remaningRequiredSeat > 0) {
-        
         // calculating the row and index to update seat
         const row = Math.floor((seatNumber - 1) / seatConstant.seatsPerRow);
         const index = (seatNumber - 1) % seatConstant.seatsPerRow;
-        
+
         //seat status updating in database
         await Seat.updateOne(
           { [`seatInRow.${row}.${index}.seatNumber`]: seatNumber },
           { $set: { [`seatInRow.${row}.${index}.status`]: status } }
         ).then((resp) => {
           if (resp.modifiedCount == 1) {
-           
             //substracting the required seats
             remaningRequiredSeat--;
           }
@@ -222,7 +225,7 @@ async function toReserveSeats(req, seatList, seatsRequired) {
 
   //variable to store available number of seat
   let availableSeatNumber = req.availableSeat;
-  if(availableSeatNumber<seatsRequired){
+  if (availableSeatNumber < seatsRequired) {
     return false;
   }
   //variable to store index value of row
@@ -337,7 +340,7 @@ exports.resetAllSeat = (req, res, next) => {
 
 //function to create seat on the basis of variable
 function creatSeat() {
-  //initializing seat number 
+  //initializing seat number
   let seatNumber = 1;
   for (let i = 0; i < totalRows; i++) {
     seatConstant.coach[i] = [];
