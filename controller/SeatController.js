@@ -222,6 +222,9 @@ async function toReserveSeats(req, seatList, seatsRequired) {
 
   //variable to store available number of seat
   let availableSeatNumber = req.availableSeat;
+  if(availableSeatNumber<seatsRequired){
+    return false;
+  }
   //variable to store index value of row
   let indexOfRow = null;
 
