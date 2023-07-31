@@ -23,7 +23,7 @@ async function fetchSeats() {
 //controller to book seat
 exports.bookSeats = async (req, res) => {
   const { book } = req.body;
-  if (book == null || book > 7) {
+  if (book == null || book > 7 || book == 0) {
     return res.status(400).json({
       message: "Invalid input",
       status: "FAILED",
